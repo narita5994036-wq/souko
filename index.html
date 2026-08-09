@@ -1,0 +1,1200 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>倉庫マップ | MYKITA Osaka</title>
+<style>
+  :root{
+    color-scheme: light only;
+    --black:#0A0A0A;
+    --gray-line:#E4E4E4;
+    --gray-mid:#9A9A9A;
+    --gray-fill:#F7F7F7;
+    --accent:#FF5A1F;
+    --white:#FFFFFF;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{
+    background:var(--white) !important;
+    color:var(--black);
+    margin:0;
+    font-family:'Inter','Hiragino Sans','Noto Sans JP',sans-serif;
+    font-weight:300;
+    -webkit-font-smoothing:antialiased;
+  }
+  body{
+    padding-bottom:env(safe-area-inset-bottom);
+    padding-top:env(safe-area-inset-top);
+  }
+  h1,h2,h3{font-family:'Montserrat','Inter',sans-serif;font-weight:400;letter-spacing:.02em;margin:0;}
+
+  /* Header */
+  header{
+    position:sticky;top:0;z-index:20;
+    background:var(--white);
+    border-bottom:1px solid var(--black);
+    padding:14px 16px 12px;
+  }
+  .brand{
+    display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px;
+  }
+  .brand .eyebrow{font-size:10px;letter-spacing:.18em;color:var(--gray-mid);text-transform:uppercase;}
+  .brand h1{font-size:15px;}
+  .search-row{display:flex;gap:8px;}
+  .search-row input{
+    flex:1;border:1px solid var(--black);padding:9px 10px;font-size:16px;
+    font-family:inherit;font-weight:300;background:var(--white);color:var(--black);
+    border-radius:0;
+  }
+  .search-row input:focus{outline:none;border-width:1.5px;}
+  .icon-btn{
+    border:1px solid var(--black);background:var(--white);
+    width:38px;height:38px;flex:none;
+    display:flex;align-items:center;justify-content:center;
+    font-size:16px;cursor:pointer;
+  }
+  .icon-btn:active{background:var(--black);color:var(--white);}
+
+  /* Search results */
+  #searchResults{
+    border-bottom:1px solid var(--black);
+    display:none;
+    max-height:40vh;overflow-y:auto;
+  }
+  #searchResults.show{display:block;}
+  .result-item{
+    padding:10px 16px;border-bottom:1px solid var(--gray-line);
+    display:flex;justify-content:space-between;align-items:center;cursor:pointer;
+    font-size:13px;
+  }
+  .result-item:active{background:var(--gray-fill);}
+  .result-item .meta{color:var(--gray-mid);font-size:11px;margin-top:2px;}
+  .result-item .tag{
+    font-size:10px;border:1px solid var(--accent);color:var(--accent);
+    padding:2px 6px;letter-spacing:.05em;
+  }
+
+  /* Map area */
+  main{padding:16px;}
+  .map-wrap{
+    max-width:480px;margin:0 auto;
+    position:relative;
+    background:
+      repeating-linear-gradient(0deg, transparent, transparent 9px, var(--gray-line) 9px, var(--gray-line) 10px),
+      repeating-linear-gradient(90deg, transparent, transparent 9px, var(--gray-line) 9px, var(--gray-line) 10px);
+  }
+  .map-wrap svg{display:block;width:100%;height:auto;}
+  .wall-line{stroke:var(--black);stroke-width:1.5;vector-effect:non-scaling-stroke;fill:none;stroke-linecap:square;}
+  .door-label{fill:var(--gray-mid);font-family:'Inter',sans-serif;font-weight:300;}
+  .dims-label{
+    text-align:center;font-size:10px;color:var(--gray-mid);letter-spacing:.1em;margin-top:8px;
+  }
+
+  .shelf-rect{fill:var(--white);stroke:var(--black);stroke-width:1;vector-effect:non-scaling-stroke;cursor:pointer;touch-action:none;}
+  .shelf-rect.floor{fill:var(--gray-fill);}
+  .shelf-rect.selected{stroke:var(--accent);stroke-width:2;fill:#FFF3EC;}
+  .shelf-rect.matched{stroke:var(--accent);stroke-width:2;}
+  .shelf-group.dragging-shelf .shelf-rect{stroke:var(--accent);stroke-width:2;fill:#FFF3EC;opacity:.9;}
+  .shelf-group{touch-action:none;}
+  .shelf-label{
+    font-family:'Inter',sans-serif;font-weight:400;pointer-events:none;
+    fill:var(--black);
+  }
+  .shelf-sub{fill:var(--gray-mid);pointer-events:none;font-weight:300;}
+
+  /* Toolbar under map */
+  .toolbar{
+    max-width:480px;margin:14px auto 0;display:flex;gap:8px;flex-wrap:wrap;
+  }
+  .btn{
+    border:1px solid var(--black);background:var(--white);color:var(--black);
+    padding:9px 14px;font-size:12px;font-family:inherit;font-weight:300;
+    letter-spacing:.03em;cursor:pointer;
+  }
+  .btn:active{background:var(--black);color:var(--white);}
+  .btn.ghost{border-color:var(--gray-mid);color:var(--gray-mid);}
+
+  /* Bottom sheet panel */
+  .sheet-overlay{
+    position:fixed;inset:0;background:rgba(10,10,10,.3);
+    display:none;z-index:40;
+  }
+  .sheet-overlay.show{display:block;}
+  .sheet{
+    position:fixed;left:0;right:0;bottom:0;z-index:50;
+    background:var(--white);border-top:1px solid var(--black);
+    max-height:82vh;overflow-y:auto;
+    transform:translateY(100%);transition:transform .25s ease;
+    padding-bottom:env(safe-area-inset-bottom);
+  }
+  .sheet.show{transform:translateY(0);}
+  .sheet-handle{
+    width:36px;height:3px;background:var(--gray-line);margin:10px auto 4px;border-radius:2px;
+  }
+  .sheet-head{
+    padding:6px 18px 12px;border-bottom:1px solid var(--gray-line);
+    display:flex;justify-content:space-between;align-items:flex-start;
+  }
+  .sheet-head h2{font-size:16px;}
+  .sheet-head .sub{font-size:11px;color:var(--gray-mid);margin-top:3px;}
+  .sheet-close{background:none;border:none;font-size:18px;color:var(--gray-mid);cursor:pointer;padding:4px;}
+
+  .tier-tabs{display:flex;border-bottom:1px solid var(--black);}
+  .tier-tab{
+    flex:1;text-align:center;padding:10px 4px;font-size:12px;cursor:pointer;
+    border-right:1px solid var(--gray-line);color:var(--gray-mid);
+  }
+  .tier-tab:last-child{border-right:none;}
+  .tier-tab.active{color:var(--black);background:var(--gray-fill);font-weight:400;}
+
+  .tier-body{padding:14px 18px 20px;}
+  .item-row{
+    display:flex;justify-content:space-between;align-items:center;
+    padding:10px 0;border-bottom:1px solid var(--gray-line);gap:10px;
+  }
+  .item-row .info{flex:1;min-width:0;}
+  .item-row .name{font-size:13px;}
+  .item-row .code{font-size:11px;color:var(--gray-mid);margin-top:2px;}
+  .item-row .qty{font-size:12px;color:var(--gray-mid);flex:none;}
+  .item-del{background:none;border:none;color:var(--gray-mid);font-size:16px;cursor:pointer;flex:none;padding:2px 4px;}
+  .empty-note{font-size:12px;color:var(--gray-mid);padding:16px 0;text-align:center;}
+
+  .add-item-form{
+    display:flex;flex-direction:column;gap:8px;margin-top:12px;padding-top:12px;border-top:1px dashed var(--gray-line);
+  }
+  .add-item-form .row2{display:flex;gap:8px;}
+  .add-item-form input{
+    border:1px solid var(--black);padding:8px 9px;font-size:16px;font-family:inherit;font-weight:300;flex:1;min-width:0;
+  }
+  .add-item-form input:focus{outline:none;}
+  .add-item-form button{
+    border:1px solid var(--black);background:var(--black);color:var(--white);
+    padding:9px;font-size:12px;font-family:inherit;letter-spacing:.05em;cursor:pointer;
+  }
+
+  .box-card{
+    border:1px solid var(--black);margin-bottom:12px;background:var(--white);
+  }
+  .box-head{
+    display:flex;justify-content:space-between;align-items:center;
+    padding:10px 12px;background:var(--gray-fill);border-bottom:1px solid var(--gray-line);
+  }
+  .box-title{display:flex;align-items:center;gap:6px;cursor:pointer;min-width:0;flex:1;}
+  .box-caret{color:var(--gray-mid);font-size:10px;flex:none;}
+  .box-icon{font-size:13px;flex:none;}
+  .box-name{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .box-count{font-size:11px;color:var(--gray-mid);flex:none;margin-left:2px;}
+  .box-actions{display:flex;gap:2px;flex:none;}
+  .box-edit,.box-del,.box-move{
+    background:none;border:none;color:var(--gray-mid);font-size:14px;cursor:pointer;padding:4px 6px;
+  }
+  .box-note{font-size:11px;color:var(--gray-mid);padding:6px 12px 0;font-style:italic;}
+  .box-items{padding:2px 12px 12px;}
+  .box-add-item-form{margin-top:8px;padding-top:8px;}
+  .add-box-btn{width:100%;margin-top:4px;}
+
+  .sheet-actions{padding:14px 18px 22px;display:flex;gap:8px;border-top:1px solid var(--gray-line);}
+  .sheet-actions .btn{flex:1;}
+  .btn.danger{border-color:#C0392B;color:#C0392B;}
+  .btn.danger:active{background:#C0392B;color:var(--white);}
+
+  /* Add-shelf modal */
+  .modal-overlay{
+    position:fixed;inset:0;background:rgba(10,10,10,.3);
+    display:none;align-items:center;justify-content:center;z-index:60;padding:20px;
+  }
+  .modal-overlay.show{display:flex;}
+  .modal{
+    background:var(--white);border:1px solid var(--black);width:100%;max-width:360px;
+    padding:20px;max-height:86vh;overflow-y:auto;
+  }
+  .modal h2{font-size:15px;margin-bottom:14px;}
+  .field{margin-bottom:12px;}
+  .field label{font-size:11px;color:var(--gray-mid);letter-spacing:.05em;display:block;margin-bottom:5px;}
+  .field input,.field select{
+    width:100%;border:1px solid var(--black);padding:8px 9px;font-size:16px;font-family:inherit;font-weight:300;
+  }
+  .field-row{display:flex;gap:10px;}
+  .field-row .field{flex:1;}
+  .modal-actions{display:flex;gap:8px;margin-top:16px;}
+  .modal-actions .btn{flex:1;}
+  .type-toggle{display:flex;border:1px solid var(--black);}
+  .type-toggle div{flex:1;text-align:center;padding:8px;font-size:12px;cursor:pointer;color:var(--gray-mid);}
+  .type-toggle div.active{background:var(--black);color:var(--white);}
+
+  /* Print */
+  .print-only{display:none;}
+  #printHeader h2{font-size:15px;margin-bottom:2px;}
+  .print-meta{font-size:10px;color:var(--gray-mid);margin-bottom:10px;}
+  #printSummary{margin-top:18px;}
+  .print-shelf{break-inside:avoid;margin-bottom:10px;border-top:1px solid var(--black);padding-top:6px;}
+  .print-shelf-name{font-size:12px;font-weight:400;margin-bottom:3px;}
+  .print-tier{font-size:10px;margin:2px 0 2px 8px;color:var(--black);}
+  .print-tier .t-label{color:var(--gray-mid);}
+  .print-box{margin-left:16px;font-size:10px;padding:1px 0;}
+  .print-empty{color:var(--gray-mid);}
+
+  @media print{
+    header, #searchResults, .toolbar, .dims-label,
+    .sheet-overlay, .sheet, .modal-overlay{display:none !important;}
+    body{padding:0;}
+    main{padding:0;}
+    .print-only{display:block;}
+    .map-wrap{max-width:100%;background:none;page-break-inside:avoid;}
+    .wall-line{stroke:#000;}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <div>
+      <div class="eyebrow">MYKITA Osaka</div>
+      <h1>倉庫マップ</h1>
+    </div>
+    <div class="eyebrow">130 × 180 cm</div>
+  </div>
+  <div class="search-row">
+    <input type="text" id="searchInput" placeholder="品名・型番・棚名で検索">
+    <button class="icon-btn" id="clearSearchBtn" title="クリア">✕</button>
+  </div>
+</header>
+
+<div id="searchResults"></div>
+
+<main>
+  <div class="print-only" id="printHeader">
+    <h2>MYKITA Osaka ・ 倉庫マップ</h2>
+    <div class="print-meta" id="printMeta"></div>
+  </div>
+
+  <div class="map-wrap">
+    <svg id="mapSvg" viewBox="0 0 130 180" preserveAspectRatio="xMidYMid meet"></svg>
+  </div>
+  <div class="dims-label" id="dimsLabel">幅130cm × 奥行180cm ・ タップして棚を選択</div>
+
+  <div class="toolbar">
+    <button class="btn" id="addShelfBtn">＋ 棚を追加</button>
+    <button class="btn" id="addFloorBtn">＋ 直置きエリア</button>
+    <button class="btn ghost" id="exportBtn">書き出し</button>
+    <button class="btn ghost" id="printBtn">🖨 印刷</button>
+  </div>
+
+  <div class="print-only" id="printSummary"></div>
+</main>
+
+<!-- Shelf detail sheet -->
+<div class="sheet-overlay" id="sheetOverlay"></div>
+<div class="sheet" id="shelfSheet">
+  <div class="sheet-handle"></div>
+  <div class="sheet-head">
+    <div>
+      <h2 id="sheetTitle">棚名</h2>
+      <div class="sub" id="sheetSub"></div>
+    </div>
+    <button class="sheet-close" id="sheetCloseBtn">✕</button>
+  </div>
+  <div class="tier-tabs" id="tierTabs"></div>
+  <div class="tier-body" id="tierBody"></div>
+  <div class="sheet-actions">
+    <button class="btn" id="editShelfBtn">棚情報を編集</button>
+    <button class="btn danger" id="deleteShelfBtn">削除</button>
+  </div>
+</div>
+
+<!-- Add/Edit shelf modal -->
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal">
+    <h2 id="modalTitle">棚を追加</h2>
+    <div class="type-toggle" id="typeToggle">
+      <div class="active" data-type="shelf">棚</div>
+      <div data-type="floor">直置き</div>
+    </div>
+    <br>
+    <div class="field">
+      <label>名称</label>
+      <input type="text" id="fName" placeholder="例：A棚 / レンズ在庫">
+    </div>
+    <div class="field-row">
+      <div class="field"><label>X (cm)</label><input type="number" id="fX" value="0"></div>
+      <div class="field"><label>Y (cm)</label><input type="number" id="fY" value="0"></div>
+    </div>
+    <div class="field-row">
+      <div class="field"><label>幅 (cm)</label><input type="number" id="fW" value="40"></div>
+      <div class="field"><label>奥行 (cm)</label><input type="number" id="fD" value="30"></div>
+    </div>
+    <div class="field" id="tierField">
+      <label>段数</label>
+      <select id="fTiers">
+        <option value="1">1段</option>
+        <option value="2">2段</option>
+        <option value="3" selected>3段</option>
+        <option value="4">4段</option>
+        <option value="5">5段</option>
+      </select>
+    </div>
+    <div class="modal-actions">
+      <button class="btn ghost" id="modalCancelBtn">キャンセル</button>
+      <button class="btn" id="modalSaveBtn" style="background:var(--black);color:#fff;">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- Generic quick dialog: replaces prompt()/confirm() which are unreliable in iOS standalone (home-screen) mode -->
+<div class="modal-overlay" id="quickDialogOverlay">
+  <div class="modal" id="quickDialogBox">
+    <h2 id="qdTitle"></h2>
+    <div class="field" id="qdFieldWrap">
+      <label id="qdLabel"></label>
+      <input type="text" id="qdInput">
+    </div>
+    <div id="qdMessage" style="font-size:13px;line-height:1.6;"></div>
+    <div class="modal-actions">
+      <button class="btn ghost" id="qdCancel">キャンセル</button>
+      <button class="btn" id="qdOk" style="background:var(--black);color:#fff;">OK</button>
+    </div>
+  </div>
+</div>
+
+<!-- Move box to another shelf/tier -->
+<div class="modal-overlay" id="moveBoxModalOverlay">
+  <div class="modal">
+    <h2>ボックスを移動</h2>
+    <div class="field">
+      <label>移動先の棚</label>
+      <select id="moveShelfSelect"></select>
+    </div>
+    <div class="field">
+      <label>段</label>
+      <select id="moveTierSelect"></select>
+    </div>
+    <div class="modal-actions">
+      <button class="btn ghost" id="moveBoxCancelBtn">キャンセル</button>
+      <button class="btn" id="moveBoxSaveBtn" style="background:var(--black);color:#fff;">移動する</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+  const STORAGE_KEY = "mykita-warehouse-map-v2";
+  const SVG_NS = "http://www.w3.org/2000/svg";
+  const ROOM_W = 130;
+  const ROOM_H = 180;
+  const DOOR_WIDTH = 60;
+  const DOOR_MARGIN = 5;
+
+  let state = loadState();
+  let selectedShelfId = null;
+  let activeTierIndex = 0;
+  let editingShelfId = null; // null = adding new
+  let modalType = "shelf";
+  let collapsedBoxes = new Set();
+
+  function migrateTier(tier){
+    // older data shape had { items: [...] } directly. Current shape has { boxes: [ {id,label,note,items:[...]} ] }
+    if(!tier.boxes){
+      const oldItems = tier.items || [];
+      tier.boxes = oldItems.length ? [{ id: uid("box"), label:"ボックス1", note:"", items: oldItems }] : [];
+      delete tier.items;
+    }
+    return tier;
+  }
+  function migrateState(s){
+    (s.shelves||[]).forEach(shelf=>{
+      (shelf.tiers||[]).forEach(migrateTier);
+    });
+    return s;
+  }
+
+  function loadState(){
+    try{
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if(raw) return migrateState(JSON.parse(raw));
+    }catch(e){}
+    return { shelves: [] };
+  }
+  function saveState(){
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  }
+  function uid(prefix){
+    return prefix + "_" + Math.random().toString(36).slice(2,9);
+  }
+
+
+  // ---------- Map rendering ----------
+  const svg = document.getElementById("mapSvg");
+
+  function renderMap(highlightIds){
+    svg.innerHTML = "";
+    highlightIds = highlightIds || [];
+
+    renderBoundaryAndDoor();
+
+    state.shelves.forEach(shelf=>{
+      const g = document.createElementNS(SVG_NS,"g");
+      g.setAttribute("class","shelf-group");
+      const r = document.createElementNS(SVG_NS,"rect");
+      r.setAttribute("x", shelf.x);
+      r.setAttribute("y", shelf.y);
+      r.setAttribute("width", shelf.w);
+      r.setAttribute("height", shelf.h);
+      let cls = "shelf-rect" + (shelf.isFloor ? " floor" : "");
+      if(shelf.id === selectedShelfId) cls += " selected";
+      else if(highlightIds.includes(shelf.id)) cls += " matched";
+      r.setAttribute("class", cls);
+      g.appendChild(r);
+
+      // label - font size scales with shelf size but clamped
+      const fs = Math.max(3.2, Math.min(5.5, shelf.w/6));
+      const label = document.createElementNS(SVG_NS,"text");
+      label.setAttribute("x", shelf.x + shelf.w/2);
+      label.setAttribute("y", shelf.y + shelf.h/2 - (shelf.h>14?2:0));
+      label.setAttribute("text-anchor","middle");
+      label.setAttribute("font-size", fs);
+      label.setAttribute("class","shelf-label");
+      label.textContent = shelf.name;
+      g.appendChild(label);
+
+      let sub = null;
+      if(shelf.h > 14){
+        sub = document.createElementNS(SVG_NS,"text");
+        sub.setAttribute("x", shelf.x + shelf.w/2);
+        sub.setAttribute("y", shelf.y + shelf.h/2 + fs);
+        sub.setAttribute("text-anchor","middle");
+        sub.setAttribute("font-size", fs*0.7);
+        sub.setAttribute("class","shelf-sub");
+        sub.textContent = (shelf.isFloor ? "直置き" : shelf.tiers.length + "段");
+        g.appendChild(sub);
+      }
+
+      attachShelfInteraction(g, r, label, sub, shelf, fs);
+      svg.appendChild(g);
+    });
+  }
+
+  // ---------- Room boundary walls + entrance door (bottom-right) ----------
+  function renderBoundaryAndDoor(){
+    const doorRightX = ROOM_W - DOOR_MARGIN;
+    const doorLeftX = doorRightX - DOOR_WIDTH;
+
+    function line(x1,y1,x2,y2,cls){
+      const l = document.createElementNS(SVG_NS,"line");
+      l.setAttribute("x1",x1); l.setAttribute("y1",y1);
+      l.setAttribute("x2",x2); l.setAttribute("y2",y2);
+      l.setAttribute("class",cls);
+      svg.appendChild(l);
+    }
+
+    // top, left, right walls (uninterrupted)
+    line(0,0, ROOM_W,0, "wall-line");
+    line(0,0, 0,ROOM_H, "wall-line");
+    line(ROOM_W,0, ROOM_W,ROOM_H, "wall-line");
+    // bottom wall, split around the door opening near the right side
+    line(0,ROOM_H, doorLeftX,ROOM_H, "wall-line");
+    line(doorRightX,ROOM_H, ROOM_W,ROOM_H, "wall-line");
+
+    const label = document.createElementNS(SVG_NS,"text");
+    label.setAttribute("x", doorLeftX + DOOR_WIDTH/2);
+    label.setAttribute("y", ROOM_H - 6);
+    label.setAttribute("text-anchor","middle");
+    label.setAttribute("font-size", 5);
+    label.setAttribute("class","door-label");
+    label.textContent = "出入口";
+    svg.appendChild(label);
+  }
+
+  // ---------- Long-press drag to move shelves ----------
+  const LONG_PRESS_MS = 420;
+  const MOVE_CANCEL_PX = 3;
+
+  function svgPointFromEvent(evt){
+    const pt = svg.createSVGPoint();
+    pt.x = evt.clientX; pt.y = evt.clientY;
+    return pt.matrixTransform(svg.getScreenCTM().inverse());
+  }
+
+  function rectsOverlap(a, b){
+    return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+  }
+  function collidesWithOtherShelf(shelf, x, y){
+    const candidate = { x, y, w: shelf.w, h: shelf.h };
+    return state.shelves.some(s => s.id !== shelf.id && rectsOverlap(candidate, s));
+  }
+
+  function attachShelfInteraction(g, rectEl, labelEl, subEl, shelf, fs){
+    let downInfo = null;
+    let longPressTimer = null;
+    let isDragging = false;
+    let suppressClick = false;
+
+    function updateVisualPosition(){
+      rectEl.setAttribute("x", shelf.x);
+      rectEl.setAttribute("y", shelf.y);
+      labelEl.setAttribute("x", shelf.x + shelf.w/2);
+      labelEl.setAttribute("y", shelf.y + shelf.h/2 - (shelf.h>14?2:0));
+      if(subEl){
+        subEl.setAttribute("x", shelf.x + shelf.w/2);
+        subEl.setAttribute("y", shelf.y + shelf.h/2 + fs);
+      }
+    }
+
+    g.addEventListener("pointerdown", (e)=>{
+      if(e.pointerType==="mouse" && e.button!==0) return;
+      const p = svgPointFromEvent(e);
+      downInfo = { startSvg:p, startX:shelf.x, startY:shelf.y, pointerId:e.pointerId };
+      isDragging = false;
+      longPressTimer = setTimeout(()=>{
+        isDragging = true;
+        try{ g.setPointerCapture(downInfo.pointerId); }catch(err){}
+        g.classList.add("dragging-shelf");
+        if(navigator.vibrate) navigator.vibrate(12);
+      }, LONG_PRESS_MS);
+    });
+
+    g.addEventListener("pointermove", (e)=>{
+      if(!downInfo || downInfo.pointerId !== e.pointerId) return;
+      const p = svgPointFromEvent(e);
+      if(isDragging){
+        e.preventDefault();
+        const dx = p.x - downInfo.startSvg.x;
+        const dy = p.y - downInfo.startSvg.y;
+        let nx = downInfo.startX + dx;
+        let ny = downInfo.startY + dy;
+        nx = Math.max(0, Math.min(ROOM_W - shelf.w, nx));
+        ny = Math.max(0, Math.min(ROOM_H - shelf.h, ny));
+        nx = Math.round(nx*2)/2;
+        ny = Math.round(ny*2)/2;
+        // move on each axis independently so the shelf can slide along a neighbor's edge
+        // instead of overlapping it
+        if(!collidesWithOtherShelf(shelf, nx, shelf.y)) shelf.x = nx;
+        if(!collidesWithOtherShelf(shelf, shelf.x, ny)) shelf.y = ny;
+        updateVisualPosition();
+      } else {
+        const dist = Math.hypot(p.x-downInfo.startSvg.x, p.y-downInfo.startSvg.y);
+        if(dist > MOVE_CANCEL_PX) clearTimeout(longPressTimer);
+      }
+    });
+
+    function endInteraction(e){
+      clearTimeout(longPressTimer);
+      if(!downInfo) return;
+      if(isDragging){
+        saveState();
+        g.classList.remove("dragging-shelf");
+        suppressClick = true;
+        setTimeout(()=>{ suppressClick=false; }, 60);
+        if(selectedShelfId===shelf.id) renderSheet();
+      } else if(!suppressClick){
+        openShelf(shelf.id);
+      }
+      isDragging = false;
+      downInfo = null;
+    }
+
+    g.addEventListener("pointerup", endInteraction);
+    g.addEventListener("pointercancel", ()=>{
+      clearTimeout(longPressTimer);
+      isDragging = false;
+      downInfo = null;
+      g.classList.remove("dragging-shelf");
+    });
+  }
+
+  // ---------- Shelf sheet ----------
+  const sheetOverlay = document.getElementById("sheetOverlay");
+  const shelfSheet = document.getElementById("shelfSheet");
+  const sheetTitle = document.getElementById("sheetTitle");
+  const sheetSub = document.getElementById("sheetSub");
+  const tierTabs = document.getElementById("tierTabs");
+  const tierBody = document.getElementById("tierBody");
+
+  function openShelf(id){
+    selectedShelfId = id;
+    activeTierIndex = 0;
+    renderMap();
+    renderSheet();
+    sheetOverlay.classList.add("show");
+    shelfSheet.classList.add("show");
+  }
+  function closeSheet(){
+    sheetOverlay.classList.remove("show");
+    shelfSheet.classList.remove("show");
+    selectedShelfId = null;
+    renderMap();
+  }
+  sheetOverlay.addEventListener("click", closeSheet);
+  document.getElementById("sheetCloseBtn").addEventListener("click", closeSheet);
+
+  function getShelf(id){ return state.shelves.find(s=>s.id===id); }
+
+  function renderSheet(){
+    const shelf = getShelf(selectedShelfId);
+    if(!shelf) return;
+    sheetTitle.textContent = shelf.name;
+    sheetSub.textContent = `${shelf.isFloor ? "直置きエリア" : "棚"} ・ 幅${shelf.w}×奥行${shelf.h}cm ・ (${shelf.x},${shelf.y})`;
+
+    tierTabs.innerHTML = "";
+    shelf.tiers.forEach((tier, i)=>{
+      const tab = document.createElement("div");
+      tab.className = "tier-tab" + (i===activeTierIndex ? " active" : "");
+      tab.textContent = shelf.isFloor ? "エリア" : (i+1)+"段目";
+      tab.addEventListener("click", ()=>{ activeTierIndex = i; renderSheet(); });
+      tierTabs.appendChild(tab);
+    });
+
+    renderTierBody(shelf);
+  }
+
+  function renderTierBody(shelf){
+    tierBody.innerHTML = "";
+    const tier = shelf.tiers[activeTierIndex];
+
+    if(tier.boxes.length === 0){
+      const empty = document.createElement("div");
+      empty.className = "empty-note";
+      empty.textContent = "この段にはまだ段ボールがありません";
+      tierBody.appendChild(empty);
+    } else {
+      tier.boxes.forEach(box=>{
+        tierBody.appendChild(renderBoxCard(shelf, tier, box));
+      });
+    }
+
+    const addBoxBtn = document.createElement("button");
+    addBoxBtn.className = "btn add-box-btn";
+    addBoxBtn.textContent = "＋ 段ボールを追加";
+    addBoxBtn.addEventListener("click", async ()=>{
+      const defaultLabel = "ボックス" + (tier.boxes.length + 1);
+      const label = await showTextDialog({title:"段ボールを追加", label:"ボックス名", defaultValue:defaultLabel});
+      if(label === null) return;
+      tier.boxes.push({ id: uid("box"), label: label.trim() || defaultLabel, note:"", items: [] });
+      saveState();
+      renderSheet();
+    });
+    tierBody.appendChild(addBoxBtn);
+  }
+
+  function renderBoxCard(shelf, tier, box){
+    const collapsed = collapsedBoxes.has(box.id);
+    const card = document.createElement("div");
+    card.className = "box-card";
+
+    const head = document.createElement("div");
+    head.className = "box-head";
+    head.innerHTML = `
+      <div class="box-title">
+        <span class="box-caret">${collapsed ? "▸" : "▾"}</span>
+        <span class="box-icon">📦</span>
+        <span class="box-name">${escapeHtml(box.label)}</span>
+        <span class="box-count">${box.items.length}点</span>
+      </div>
+      <div class="box-actions">
+        <button class="box-move" title="移動">⇄</button>
+        <button class="box-edit" title="編集">✎</button>
+        <button class="box-del" title="削除">✕</button>
+      </div>
+    `;
+    head.querySelector(".box-title").addEventListener("click", ()=>{
+      if(collapsedBoxes.has(box.id)) collapsedBoxes.delete(box.id);
+      else collapsedBoxes.add(box.id);
+      renderSheet();
+    });
+    head.querySelector(".box-move").addEventListener("click", (e)=>{
+      e.stopPropagation();
+      openMoveBoxDialog(shelf, tier, box);
+    });
+    head.querySelector(".box-edit").addEventListener("click", async (e)=>{
+      e.stopPropagation();
+      const newLabel = await showTextDialog({title:"ボックス名を編集", defaultValue:box.label});
+      if(newLabel === null) return;
+      box.label = newLabel.trim() || box.label;
+      const newNote = await showTextDialog({title:"メモを編集（任意）", defaultValue:box.note || "", placeholder:"例：入口側"});
+      if(newNote !== null) box.note = newNote.trim();
+      saveState();
+      renderSheet();
+    });
+    head.querySelector(".box-del").addEventListener("click", async (e)=>{
+      e.stopPropagation();
+      const ok = await showConfirmDialog({title:"削除の確認", message:`「${box.label}」を削除しますか？中の収納品も削除されます。`});
+      if(!ok) return;
+      tier.boxes = tier.boxes.filter(b=>b.id!==box.id);
+      saveState();
+      renderSheet();
+    });
+    card.appendChild(head);
+
+    if(box.note){
+      const note = document.createElement("div");
+      note.className = "box-note";
+      note.textContent = box.note;
+      card.appendChild(note);
+    }
+
+    if(!collapsed){
+      const itemsWrap = document.createElement("div");
+      itemsWrap.className = "box-items";
+
+      if(box.items.length === 0){
+        const empty = document.createElement("div");
+        empty.className = "empty-note";
+        empty.style.padding = "8px 0";
+        empty.textContent = "このボックスは空です";
+        itemsWrap.appendChild(empty);
+      } else {
+        box.items.forEach(item=>{
+          const row = document.createElement("div");
+          row.className = "item-row";
+          row.innerHTML = `
+            <div class="info">
+              <div class="name">${escapeHtml(item.name)}</div>
+            </div>
+            <div class="qty">${item.qty ? item.qty+"個" : ""}</div>
+            <button class="item-del">✕</button>
+          `;
+          row.querySelector(".item-del").addEventListener("click", (e)=>{
+            e.stopPropagation();
+            box.items = box.items.filter(it=>it.id!==item.id);
+            saveState(); renderSheet();
+          });
+          itemsWrap.appendChild(row);
+        });
+      }
+
+      const form = document.createElement("div");
+      form.className = "add-item-form box-add-item-form";
+      form.innerHTML = `
+        <div class="row2">
+          <input type="text" placeholder="品名" class="boxItemName">
+          <input type="number" placeholder="数量" class="boxItemQty" style="max-width:70px;">
+        </div>
+        <button class="boxAddItemBtn">ボックスに追加</button>
+      `;
+      form.querySelector(".boxAddItemBtn").addEventListener("click", ()=>{
+        const nameInput = form.querySelector(".boxItemName");
+        const qtyInput = form.querySelector(".boxItemQty");
+        const name = nameInput.value.trim();
+        if(!name) return;
+        const qty = qtyInput.value.trim();
+        box.items.push({ id: uid("item"), name, qty });
+        saveState();
+        renderSheet();
+      });
+      itemsWrap.appendChild(form);
+
+      card.appendChild(itemsWrap);
+    }
+
+    return card;
+  }
+
+  document.getElementById("deleteShelfBtn").addEventListener("click", async ()=>{
+    if(!selectedShelfId) return;
+    const ok = await showConfirmDialog({title:"削除の確認", message:"この棚を削除しますか？収納データもすべて削除されます。"});
+    if(!ok) return;
+    state.shelves = state.shelves.filter(s=>s.id!==selectedShelfId);
+    saveState();
+    closeSheet();
+  });
+
+  document.getElementById("editShelfBtn").addEventListener("click", ()=>{
+    const shelf = getShelf(selectedShelfId);
+    if(!shelf) return;
+    openModal(shelf);
+  });
+
+  // ---------- Generic quick dialog (Promise-based, replaces prompt()/confirm()) ----------
+  const qdOverlay = document.getElementById("quickDialogOverlay");
+  const qdTitleEl = document.getElementById("qdTitle");
+  const qdFieldWrap = document.getElementById("qdFieldWrap");
+  const qdLabelEl = document.getElementById("qdLabel");
+  const qdInput = document.getElementById("qdInput");
+  const qdMessageEl = document.getElementById("qdMessage");
+  const qdCancelBtn = document.getElementById("qdCancel");
+  const qdOkBtn = document.getElementById("qdOk");
+  let qdResolve = null;
+  let qdType = "text";
+
+  function showTextDialog({title, label="", defaultValue="", placeholder=""}){
+    return new Promise(resolve=>{
+      qdType = "text";
+      qdResolve = resolve;
+      qdTitleEl.textContent = title;
+      qdFieldWrap.style.display = "block";
+      qdMessageEl.style.display = "none";
+      qdLabelEl.textContent = label;
+      qdLabelEl.style.display = label ? "block" : "none";
+      qdInput.value = defaultValue;
+      qdInput.placeholder = placeholder;
+      qdOverlay.classList.add("show");
+      setTimeout(()=>{ qdInput.focus(); qdInput.select(); }, 60);
+    });
+  }
+  function showConfirmDialog({title, message}){
+    return new Promise(resolve=>{
+      qdType = "confirm";
+      qdResolve = resolve;
+      qdTitleEl.textContent = title;
+      qdFieldWrap.style.display = "none";
+      qdMessageEl.style.display = "block";
+      qdMessageEl.textContent = message;
+      qdOverlay.classList.add("show");
+    });
+  }
+  function closeQuickDialog(result){
+    qdOverlay.classList.remove("show");
+    if(qdResolve) qdResolve(result);
+    qdResolve = null;
+  }
+  qdCancelBtn.addEventListener("click", ()=> closeQuickDialog(qdType==="confirm" ? false : null));
+  qdOkBtn.addEventListener("click", ()=> closeQuickDialog(qdType==="confirm" ? true : qdInput.value));
+  qdOverlay.addEventListener("click", (e)=>{ if(e.target===qdOverlay) closeQuickDialog(qdType==="confirm" ? false : null); });
+  qdInput.addEventListener("keydown", (e)=>{ if(e.key==="Enter"){ e.preventDefault(); closeQuickDialog(qdInput.value); } });
+
+  // ---------- Add / Edit shelf modal ----------
+  const modalOverlay = document.getElementById("modalOverlay");
+  const modalTitle = document.getElementById("modalTitle");
+  const typeToggle = document.getElementById("typeToggle");
+  const tierField = document.getElementById("tierField");
+
+  function openModal(shelf){
+    editingShelfId = shelf ? shelf.id : null;
+    modalType = shelf ? (shelf.isFloor ? "floor" : "shelf") : "shelf";
+    updateTypeToggleUI();
+    modalTitle.textContent = shelf ? "棚情報を編集" : (modalType==="floor" ? "直置きエリアを追加" : "棚を追加");
+
+    document.getElementById("fName").value = shelf ? shelf.name : "";
+    document.getElementById("fX").value = shelf ? shelf.x : 0;
+    document.getElementById("fY").value = shelf ? shelf.y : 0;
+    document.getElementById("fW").value = shelf ? shelf.w : 40;
+    document.getElementById("fD").value = shelf ? shelf.h : 30;
+    document.getElementById("fTiers").value = shelf ? shelf.tiers.length : 3;
+
+    modalOverlay.classList.add("show");
+  }
+  function closeModal(){ modalOverlay.classList.remove("show"); }
+
+  function updateTypeToggleUI(){
+    [...typeToggle.children].forEach(c=>{
+      c.classList.toggle("active", c.dataset.type === modalType);
+    });
+    tierField.style.display = modalType === "floor" ? "none" : "block";
+  }
+  typeToggle.addEventListener("click", (e)=>{
+    const t = e.target.closest("[data-type]");
+    if(!t || editingShelfId) return; // don't allow type switch while editing
+    modalType = t.dataset.type;
+    updateTypeToggleUI();
+  });
+
+  document.getElementById("addShelfBtn").addEventListener("click", ()=>{ modalType="shelf"; openModal(null); });
+  document.getElementById("addFloorBtn").addEventListener("click", ()=>{ modalType="floor"; openModal(null); });
+  document.getElementById("modalCancelBtn").addEventListener("click", closeModal);
+  modalOverlay.addEventListener("click", (e)=>{ if(e.target===modalOverlay) closeModal(); });
+
+  document.getElementById("modalSaveBtn").addEventListener("click", ()=>{
+    const name = document.getElementById("fName").value.trim() || (modalType==="floor" ? "直置きエリア" : "無題の棚");
+    const x = parseFloat(document.getElementById("fX").value) || 0;
+    const y = parseFloat(document.getElementById("fY").value) || 0;
+    const w = parseFloat(document.getElementById("fW").value) || 10;
+    const h = parseFloat(document.getElementById("fD").value) || 10;
+    const isFloor = modalType === "floor";
+    const tierCount = isFloor ? 1 : (parseInt(document.getElementById("fTiers").value) || 1);
+
+    if(editingShelfId){
+      const shelf = getShelf(editingShelfId);
+      shelf.name = name; shelf.x = x; shelf.y = y; shelf.w = w; shelf.h = h;
+      // adjust tier count, preserving existing items
+      while(shelf.tiers.length < tierCount) shelf.tiers.push({ boxes: [] });
+      while(shelf.tiers.length > tierCount) shelf.tiers.pop();
+    } else {
+      const shelf = {
+        id: uid("shelf"), name, x, y, w, h, isFloor,
+        tiers: Array.from({length: tierCount}, ()=>({ boxes: [] }))
+      };
+      state.shelves.push(shelf);
+    }
+    saveState();
+    closeModal();
+    renderMap();
+    if(selectedShelfId) renderSheet();
+  });
+
+  // ---------- Move box to another shelf/tier ----------
+  const moveBoxModalOverlay = document.getElementById("moveBoxModalOverlay");
+  const moveShelfSelect = document.getElementById("moveShelfSelect");
+  const moveTierSelect = document.getElementById("moveTierSelect");
+  let moveBoxContext = null; // { shelf, tier, box }
+
+  function populateMoveTierSelect(shelfId){
+    const targetShelf = getShelf(shelfId);
+    moveTierSelect.innerHTML = "";
+    targetShelf.tiers.forEach((t, i)=>{
+      const opt = document.createElement("option");
+      opt.value = i;
+      opt.textContent = targetShelf.isFloor ? "エリア" : (i+1)+"段目";
+      moveTierSelect.appendChild(opt);
+    });
+  }
+
+  function openMoveBoxDialog(shelf, tier, box){
+    moveBoxContext = { shelf, tier, box };
+    moveShelfSelect.innerHTML = "";
+    state.shelves.forEach(s=>{
+      const opt = document.createElement("option");
+      opt.value = s.id;
+      opt.textContent = s.name;
+      moveShelfSelect.appendChild(opt);
+    });
+    moveShelfSelect.value = shelf.id;
+    populateMoveTierSelect(shelf.id);
+    moveTierSelect.value = shelf.tiers.indexOf(tier);
+    moveBoxModalOverlay.classList.add("show");
+  }
+
+  moveShelfSelect.addEventListener("change", ()=>{
+    populateMoveTierSelect(moveShelfSelect.value);
+  });
+
+  document.getElementById("moveBoxCancelBtn").addEventListener("click", ()=>{
+    moveBoxModalOverlay.classList.remove("show");
+    moveBoxContext = null;
+  });
+  moveBoxModalOverlay.addEventListener("click", (e)=>{
+    if(e.target===moveBoxModalOverlay){ moveBoxModalOverlay.classList.remove("show"); moveBoxContext = null; }
+  });
+
+  document.getElementById("moveBoxSaveBtn").addEventListener("click", ()=>{
+    if(!moveBoxContext) return;
+    const { shelf: srcShelf, tier: srcTier, box } = moveBoxContext;
+    const destShelf = getShelf(moveShelfSelect.value);
+    const destTierIndex = parseInt(moveTierSelect.value, 10);
+    const destTier = destShelf.tiers[destTierIndex];
+
+    const sameSpot = (destShelf.id === srcShelf.id) && (destTier === srcTier);
+    if(!sameSpot){
+      srcTier.boxes = srcTier.boxes.filter(b => b.id !== box.id);
+      destTier.boxes.push(box);
+      saveState();
+      if(selectedShelfId === srcShelf.id || selectedShelfId === destShelf.id){
+        if(selectedShelfId === destShelf.id) activeTierIndex = destTierIndex;
+        renderSheet();
+      }
+    }
+    moveBoxModalOverlay.classList.remove("show");
+    moveBoxContext = null;
+  });
+
+
+  // ---------- Search ----------
+  const searchInput = document.getElementById("searchInput");
+  const searchResults = document.getElementById("searchResults");
+
+  function runSearch(query){
+    query = query.trim().toLowerCase();
+    if(!query){
+      searchResults.classList.remove("show");
+      searchResults.innerHTML = "";
+      renderMap();
+      return;
+    }
+    const matches = [];
+    const matchedShelfIds = new Set();
+    state.shelves.forEach(shelf=>{
+      const shelfNameMatch = shelf.name.toLowerCase().includes(query);
+      let shelfHasAnyBox = false;
+      shelf.tiers.forEach((tier, ti)=>{
+        tier.boxes.forEach(box=>{
+          shelfHasAnyBox = true;
+          const boxLabelMatch = box.label.toLowerCase().includes(query);
+          box.items.forEach(item=>{
+            const hit = shelfNameMatch || boxLabelMatch || item.name.toLowerCase().includes(query);
+            if(hit){
+              matches.push({ shelfId: shelf.id, shelfName: shelf.name, tierIndex: ti, isFloor: shelf.isFloor, boxLabel: box.label, boxId: box.id, item });
+              matchedShelfIds.add(shelf.id);
+            }
+          });
+          if(boxLabelMatch && box.items.length===0){
+            matches.push({ shelfId: shelf.id, shelfName: shelf.name, tierIndex: ti, isFloor: shelf.isFloor, boxLabel: box.label, boxId: box.id, item:{name:"(空のボックス)"} });
+            matchedShelfIds.add(shelf.id);
+          }
+        });
+      });
+      if(shelfNameMatch && !shelfHasAnyBox){
+        matchedShelfIds.add(shelf.id);
+      }
+    });
+
+    renderMap([...matchedShelfIds]);
+
+    searchResults.innerHTML = "";
+    if(matches.length === 0){
+      searchResults.innerHTML = `<div class="result-item"><span>一致する収納品が見つかりません</span></div>`;
+    } else {
+      matches.forEach(m=>{
+        const row = document.createElement("div");
+        row.className = "result-item";
+        row.innerHTML = `
+          <div>
+            <div>${escapeHtml(m.item.name)}</div>
+            <div class="meta">${escapeHtml(m.shelfName)} ・ ${m.isFloor?"直置き":( (m.tierIndex+1)+"段目")} ・ 📦${escapeHtml(m.boxLabel)}</div>
+          </div>
+          <div class="tag">開く</div>
+        `;
+        row.addEventListener("click", ()=>{
+          searchInput.value = "";
+          searchResults.classList.remove("show");
+          activeTierIndex = m.tierIndex;
+          collapsedBoxes.delete(m.boxId);
+          openShelf(m.shelfId);
+        });
+        searchResults.appendChild(row);
+      });
+    }
+    searchResults.classList.add("show");
+  }
+
+  searchInput.addEventListener("input", (e)=> runSearch(e.target.value));
+  document.getElementById("clearSearchBtn").addEventListener("click", ()=>{
+    searchInput.value = "";
+    runSearch("");
+  });
+
+  // ---------- Print ----------
+  function renderPrintSummary(){
+    const meta = document.getElementById("printMeta");
+    const now = new Date();
+    meta.textContent = `幅130cm × 奥行180cm ・ 出力日 ${now.getFullYear()}/${now.getMonth()+1}/${now.getDate()}`;
+
+    const wrap = document.getElementById("printSummary");
+    wrap.innerHTML = "";
+    if(state.shelves.length === 0){
+      wrap.innerHTML = `<div class="print-empty">登録されている棚がありません</div>`;
+      return;
+    }
+    state.shelves.forEach(shelf=>{
+      const block = document.createElement("div");
+      block.className = "print-shelf";
+      const totalBoxes = shelf.tiers.reduce((n,t)=>n+t.boxes.length,0);
+      let html = `<div class="print-shelf-name">${escapeHtml(shelf.name)} — ${shelf.isFloor?"直置き":"棚"} ・ 幅${shelf.w}×奥行${shelf.h}cm ・ 位置(${shelf.x},${shelf.y})</div>`;
+      if(totalBoxes === 0){
+        html += `<div class="print-tier print-empty">収納品の登録なし</div>`;
+      } else {
+        shelf.tiers.forEach((tier, ti)=>{
+          if(tier.boxes.length === 0) return;
+          html += `<div class="print-tier"><span class="t-label">${shelf.isFloor?"エリア":(ti+1)+"段目"}：</span></div>`;
+          tier.boxes.forEach(box=>{
+            const itemsStr = box.items.length
+              ? box.items.map(it => escapeHtml(it.name) + (it.qty ? `(${escapeHtml(it.qty)})` : "")).join("、")
+              : "空";
+            html += `<div class="print-box">📦 ${escapeHtml(box.label)}${box.note? " ／ "+escapeHtml(box.note):""} ： ${itemsStr}</div>`;
+          });
+        });
+      }
+      block.innerHTML = html;
+      wrap.appendChild(block);
+    });
+  }
+
+  document.getElementById("printBtn").addEventListener("click", ()=>{
+    renderPrintSummary();
+    openPrintWindow();
+  });
+
+  // Tries opening a separate tab/window with just the printable map + inventory and printing
+  // from there (works around iOS Safari's standalone-PWA limitation where window.print() does
+  // nothing). If that's blocked (e.g. inside a sandboxed preview), falls back to printing in place.
+  function openPrintWindow(){
+    const svgMarkup = document.getElementById("mapSvg").outerHTML;
+    const summaryMarkup = document.getElementById("printSummary").innerHTML;
+    const metaText = document.getElementById("printMeta").textContent;
+
+    const doc = `<!DOCTYPE html>
+<html lang="ja"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>倉庫マップ - 印刷用</title>
+<style>
+  *{box-sizing:border-box;}
+  body{
+    font-family:'Inter','Hiragino Sans','Noto Sans JP',sans-serif;font-weight:300;
+    color:#0A0A0A;background:#fff;margin:0;padding:20px;
+  }
+  h2{font-family:'Montserrat','Inter',sans-serif;font-weight:400;font-size:15px;margin:0 0 2px;}
+  .meta{font-size:10px;color:#9A9A9A;margin-bottom:14px;}
+  .map-wrap{max-width:480px;margin:0 auto 24px;border:1px solid #0A0A0A;}
+  svg{display:block;width:100%;height:auto;}
+  .wall-line{stroke:#0A0A0A;stroke-width:1.5;vector-effect:non-scaling-stroke;fill:none;stroke-linecap:square;}
+  .door-label{fill:#9A9A9A;font-family:'Inter',sans-serif;font-weight:300;}
+  .shelf-rect{fill:#fff;stroke:#0A0A0A;stroke-width:1;vector-effect:non-scaling-stroke;}
+  .shelf-rect.floor{fill:#F7F7F7;}
+  .shelf-label{fill:#0A0A0A;font-family:'Inter',sans-serif;font-weight:400;}
+  .shelf-sub{fill:#9A9A9A;font-weight:300;}
+  .print-shelf{break-inside:avoid;margin-bottom:10px;border-top:1px solid #0A0A0A;padding-top:6px;}
+  .print-shelf-name{font-size:12px;font-weight:400;margin-bottom:3px;}
+  .print-tier{font-size:10px;margin:2px 0 2px 8px;}
+  .print-tier .t-label{color:#9A9A9A;}
+  .print-box{margin-left:16px;font-size:10px;padding:1px 0;}
+  .print-empty{color:#9A9A9A;}
+  @media print{ body{padding:0;} }
+</style></head>
+<body>
+  <h2>MYKITA Osaka ・ 倉庫マップ</h2>
+  <div class="meta">${metaText}</div>
+  <div class="map-wrap">${svgMarkup}</div>
+  <div>${summaryMarkup}</div>
+  <script>
+    window.addEventListener('load', function(){ setTimeout(function(){ window.print(); }, 200); });
+  <\/script>
+</body></html>`;
+
+    let printWin = null;
+    try{ printWin = window.open("", "_blank"); }catch(e){ printWin = null; }
+    if(!printWin){
+      // popup blocked or unavailable — fall back to trying print() in place
+      try{ window.print(); }catch(e){}
+      return;
+    }
+    printWin.document.open();
+    printWin.document.write(doc);
+    printWin.document.close();
+  }
+
+  // ---------- Export ----------
+  document.getElementById("exportBtn").addEventListener("click", ()=>{
+    const blob = new Blob([JSON.stringify(state, null, 2)], {type:"application/json"});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "warehouse-map-" + new Date().toISOString().slice(0,10) + ".json";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  });
+
+  function escapeHtml(str){
+    return String(str).replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+  }
+
+  // ---------- Seed sample data on first run ----------
+  if(state.shelves.length === 0){
+    state.shelves.push({
+      id: uid("shelf"), name:"A棚", x:5, y:5, w:40, h:30, isFloor:false,
+      tiers:[{boxes:[]},{boxes:[]},{boxes:[]}]
+    });
+    state.shelves.push({
+      id: uid("shelf"), name:"床置きエリア", x:5, y:90, w:60, h:35, isFloor:true,
+      tiers:[{boxes:[]}]
+    });
+    saveState();
+  }
+
+  renderMap();
+  renderPrintSummary();
+})();
+</script>
+</body>
+</html>
