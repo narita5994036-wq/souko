@@ -156,9 +156,28 @@
   .item-row .info{flex:1;min-width:0;}
   .item-row .name{font-size:13px;}
   .item-row .code{font-size:11px;color:var(--gray-mid);margin-top:2px;}
-  .item-row .qty{font-size:12px;color:var(--gray-mid);flex:none;}
   .item-del{background:none;border:none;color:var(--gray-mid);font-size:16px;cursor:pointer;flex:none;padding:2px 4px;}
   .empty-note{font-size:12px;color:var(--gray-mid);padding:16px 0;text-align:center;}
+
+  .qty-stepper{display:flex;align-items:center;gap:0;flex:none;border:1px solid var(--black);}
+  .qty-btn{
+    background:var(--white);border:none;color:var(--black);
+    width:26px;height:26px;font-size:14px;line-height:1;cursor:pointer;
+    display:flex;align-items:center;justify-content:center;flex:none;
+  }
+  .qty-btn:active{background:var(--black);color:var(--white);}
+  .qty-btn:first-child{border-right:1px solid var(--black);}
+  .qty-btn:last-child{border-left:1px solid var(--black);}
+  .qty-val{min-width:28px;text-align:center;font-size:12px;padding:0 2px;}
+
+  .log-list{display:flex;flex-direction:column;}
+  .log-entry{padding:9px 0;border-bottom:1px solid var(--gray-line);font-size:12px;}
+  .log-entry .log-main{display:flex;justify-content:space-between;gap:8px;}
+  .log-entry .log-item{flex:1;min-width:0;}
+  .log-entry .log-delta{flex:none;font-weight:400;}
+  .log-entry .log-delta.plus{color:var(--accent);}
+  .log-entry .log-delta.minus{color:#C0392B;}
+  .log-entry .log-meta{font-size:11px;color:var(--gray-mid);margin-top:2px;}
 
   .add-item-form{
     display:flex;flex-direction:column;gap:8px;margin-top:12px;padding-top:12px;border-top:1px dashed var(--gray-line);
@@ -278,6 +297,7 @@
   <div class="toolbar">
     <button class="btn" id="addShelfBtn">＋ 棚を追加</button>
     <button class="btn" id="addFloorBtn">＋ 直置きエリア</button>
+    <button class="btn ghost" id="logBtn">📝 ログ</button>
     <button class="btn ghost" id="exportBtn">書き出し</button>
     <button class="btn ghost" id="printBtn">🖨 印刷</button>
   </div>
@@ -338,6 +358,18 @@
     <div class="modal-actions">
       <button class="btn ghost" id="modalCancelBtn">キャンセル</button>
       <button class="btn" id="modalSaveBtn" style="background:var(--black);color:#fff;">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- Change log -->
+<div class="modal-overlay" id="logModalOverlay">
+  <div class="modal">
+    <h2>変更ログ</h2>
+    <div class="log-list" id="logList"></div>
+    <div class="modal-actions">
+      <button class="btn danger" id="logClearBtn">ログを消去</button>
+      <button class="btn" id="logCloseBtn" style="background:var(--black);color:#fff;">閉じる</button>
     </div>
   </div>
 </div>
@@ -405,9 +437,27 @@
   }
   function migrateState(s){
     (s.shelves||[]).forEach(shelf=>{
-      (shelf.tiers||[]).forEach(migrateTier);
+      (shelf.tiers||[]).forEach(tier=>{
+        migrateTier(tier);
+        tier.boxes.forEach(box=>{
+          box.items.forEach(item=>{
+            const n = parseInt(item.qty, 10);
+            item.qty = isNaN(n) ? 0 : n;
+          });
+        });
+      });
     });
+    if(!Array.isArray(s.log)) s.log = [];
     return s;
+  }
+
+  const LOG_MAX_ENTRIES = 300;
+  function addLog({type, shelfName, boxLabel, itemName, delta, qtyAfter}){
+    state.log.unshift({
+      id: uid("log"), ts: Date.now(),
+      type, shelfName, boxLabel, itemName, delta, qtyAfter
+    });
+    if(state.log.length > LOG_MAX_ENTRIES) state.log.length = LOG_MAX_ENTRIES;
   }
 
   function loadState(){
@@ -415,7 +465,7 @@
       const raw = localStorage.getItem(STORAGE_KEY);
       if(raw) return migrateState(JSON.parse(raw));
     }catch(e){}
-    return { shelves: [] };
+    return { shelves: [], log: [] };
   }
   function saveState(){
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
@@ -678,6 +728,16 @@
     tierBody.appendChild(addBoxBtn);
   }
 
+  function adjustItemQty(shelf, box, item, delta){
+    const before = item.qty || 0;
+    const after = Math.max(0, before + delta);
+    if(after === before) return;
+    item.qty = after;
+    addLog({type: delta>0?"increase":"decrease", shelfName:shelf.name, boxLabel:box.label, itemName:item.name, delta: after-before, qtyAfter: after});
+    saveState();
+    renderSheet();
+  }
+
   function renderBoxCard(shelf, tier, box){
     const collapsed = collapsedBoxes.has(box.id);
     const card = document.createElement("div");
@@ -752,11 +812,24 @@
             <div class="info">
               <div class="name">${escapeHtml(item.name)}</div>
             </div>
-            <div class="qty">${item.qty ? item.qty+"個" : ""}</div>
+            <div class="qty-stepper">
+              <button class="qty-btn qty-minus" type="button">－</button>
+              <span class="qty-val">${item.qty || 0}</span>
+              <button class="qty-btn qty-plus" type="button">＋</button>
+            </div>
             <button class="item-del">✕</button>
           `;
+          row.querySelector(".qty-minus").addEventListener("click", (e)=>{
+            e.stopPropagation();
+            adjustItemQty(shelf, box, item, -1);
+          });
+          row.querySelector(".qty-plus").addEventListener("click", (e)=>{
+            e.stopPropagation();
+            adjustItemQty(shelf, box, item, 1);
+          });
           row.querySelector(".item-del").addEventListener("click", (e)=>{
             e.stopPropagation();
+            addLog({type:"remove", shelfName:shelf.name, boxLabel:box.label, itemName:item.name, delta:-(item.qty||0), qtyAfter:0});
             box.items = box.items.filter(it=>it.id!==item.id);
             saveState(); renderSheet();
           });
@@ -778,8 +851,9 @@
         const qtyInput = form.querySelector(".boxItemQty");
         const name = nameInput.value.trim();
         if(!name) return;
-        const qty = qtyInput.value.trim();
+        const qty = parseInt(qtyInput.value, 10) || 0;
         box.items.push({ id: uid("item"), name, qty });
+        addLog({type:"add", shelfName:shelf.name, boxLabel:box.label, itemName:name, delta:qty, qtyAfter:qty});
         saveState();
         renderSheet();
       });
@@ -988,6 +1062,58 @@
     moveBoxContext = null;
   });
 
+
+  // ---------- Change log ----------
+  const logModalOverlay = document.getElementById("logModalOverlay");
+  const logList = document.getElementById("logList");
+
+  const LOG_TYPE_LABEL = { increase:"増加", decrease:"減少", add:"追加", remove:"削除" };
+
+  function formatLogTime(ts){
+    const d = new Date(ts);
+    const pad = n => String(n).padStart(2,"0");
+    return `${d.getMonth()+1}/${d.getDate()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }
+
+  function renderLogList(){
+    logList.innerHTML = "";
+    if(state.log.length === 0){
+      logList.innerHTML = `<div class="empty-note">まだ変更ログはありません</div>`;
+      return;
+    }
+    state.log.forEach(entry=>{
+      const row = document.createElement("div");
+      row.className = "log-entry";
+      const deltaSign = entry.delta > 0 ? "+" : "";
+      const deltaCls = entry.delta > 0 ? "plus" : (entry.delta < 0 ? "minus" : "");
+      row.innerHTML = `
+        <div class="log-main">
+          <div class="log-item">${escapeHtml(LOG_TYPE_LABEL[entry.type]||entry.type)} ・ ${escapeHtml(entry.itemName)}</div>
+          <div class="log-delta ${deltaCls}">${deltaSign}${entry.delta}（計${entry.qtyAfter}）</div>
+        </div>
+        <div class="log-meta">${formatLogTime(entry.ts)} ・ ${escapeHtml(entry.shelfName)} ・ 📦${escapeHtml(entry.boxLabel)}</div>
+      `;
+      logList.appendChild(row);
+    });
+  }
+
+  document.getElementById("logBtn").addEventListener("click", ()=>{
+    renderLogList();
+    logModalOverlay.classList.add("show");
+  });
+  document.getElementById("logCloseBtn").addEventListener("click", ()=>{
+    logModalOverlay.classList.remove("show");
+  });
+  logModalOverlay.addEventListener("click", (e)=>{
+    if(e.target===logModalOverlay) logModalOverlay.classList.remove("show");
+  });
+  document.getElementById("logClearBtn").addEventListener("click", async ()=>{
+    const ok = await showConfirmDialog({title:"ログの消去", message:"変更ログをすべて消去しますか？"});
+    if(!ok) return;
+    state.log = [];
+    saveState();
+    renderLogList();
+  });
 
   // ---------- Search ----------
   const searchInput = document.getElementById("searchInput");
