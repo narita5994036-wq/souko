@@ -204,10 +204,13 @@
   .box-icon{font-size:13px;flex:none;}
   .box-name{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   .box-count{font-size:11px;color:var(--gray-mid);flex:none;margin-left:2px;}
-  .box-actions{display:flex;gap:2px;flex:none;}
+  .box-actions{display:flex;gap:0;flex:none;margin-right:-6px;}
   .box-edit,.box-del,.box-move{
-    background:none;border:none;color:var(--gray-mid);font-size:14px;cursor:pointer;padding:4px 6px;
+    background:none;border:none;color:var(--gray-mid);font-size:16px;cursor:pointer;
+    width:38px;height:38px;padding:0;flex:none;
+    display:flex;align-items:center;justify-content:center;
   }
+  .box-edit:active,.box-del:active,.box-move:active{color:var(--black);}
   .box-note{font-size:11px;color:var(--gray-mid);padding:6px 12px 0;font-style:italic;}
   .box-items{padding:2px 12px 12px;}
   .box-add-item-form{margin-top:8px;padding-top:8px;}
