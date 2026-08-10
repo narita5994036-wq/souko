@@ -192,6 +192,10 @@
     padding:9px;font-size:12px;font-family:inherit;letter-spacing:.05em;cursor:pointer;
   }
 
+  .loose-section{border:1px dashed var(--gray-mid);margin-bottom:14px;padding:10px 12px 12px;}
+  .loose-head{font-size:11px;color:var(--gray-mid);letter-spacing:.05em;margin-bottom:2px;}
+  .loose-section .add-item-form{margin-top:8px;padding-top:8px;}
+
   .box-card{
     border:1px solid var(--black);margin-bottom:12px;background:var(--white);
   }
@@ -436,18 +440,20 @@
       tier.boxes = oldItems.length ? [{ id: uid("box"), label:"ボックス1", note:"", items: oldItems }] : [];
       delete tier.items;
     }
+    // looseItems = items placed directly on the tier/shelf, not inside any box
+    if(!Array.isArray(tier.looseItems)) tier.looseItems = [];
     return tier;
+  }
+  function normalizeQty(item){
+    const n = parseInt(item.qty, 10);
+    item.qty = isNaN(n) ? 0 : n;
   }
   function migrateState(s){
     (s.shelves||[]).forEach(shelf=>{
       (shelf.tiers||[]).forEach(tier=>{
         migrateTier(tier);
-        tier.boxes.forEach(box=>{
-          box.items.forEach(item=>{
-            const n = parseInt(item.qty, 10);
-            item.qty = isNaN(n) ? 0 : n;
-          });
-        });
+        tier.boxes.forEach(box=> box.items.forEach(normalizeQty));
+        tier.looseItems.forEach(normalizeQty);
       });
     });
     if(!Array.isArray(s.log)) s.log = [];
@@ -706,6 +712,8 @@
     tierBody.innerHTML = "";
     const tier = shelf.tiers[activeTierIndex];
 
+    tierBody.appendChild(renderLooseItemsSection(shelf, tier));
+
     if(tier.boxes.length === 0){
       const empty = document.createElement("div");
       empty.className = "empty-note";
@@ -731,14 +739,89 @@
     tierBody.appendChild(addBoxBtn);
   }
 
-  function adjustItemQty(shelf, box, item, delta){
+  function adjustItemQty(shelf, boxLabel, item, delta){
     const before = item.qty || 0;
     const after = Math.max(0, before + delta);
     if(after === before) return;
     item.qty = after;
-    addLog({type: delta>0?"increase":"decrease", shelfName:shelf.name, boxLabel:box.label, itemName:item.name, delta: after-before, qtyAfter: after});
+    addLog({type: delta>0?"increase":"decrease", shelfName:shelf.name, boxLabel, itemName:item.name, delta: after-before, qtyAfter: after});
     saveState();
     renderSheet();
+  }
+
+  // Renders one item row with a qty stepper + delete button; onAdjust(delta) and onDelete() are supplied by the caller.
+  function renderItemRow(item, onAdjust, onDelete){
+    const row = document.createElement("div");
+    row.className = "item-row";
+    row.innerHTML = `
+      <div class="info">
+        <div class="name">${escapeHtml(item.name)}</div>
+      </div>
+      <div class="qty-stepper">
+        <button class="qty-btn qty-minus" type="button">－</button>
+        <span class="qty-val">${item.qty || 0}</span>
+        <button class="qty-btn qty-plus" type="button">＋</button>
+      </div>
+      <button class="item-del">✕</button>
+    `;
+    row.querySelector(".qty-minus").addEventListener("click", (e)=>{ e.stopPropagation(); onAdjust(-1); });
+    row.querySelector(".qty-plus").addEventListener("click", (e)=>{ e.stopPropagation(); onAdjust(1); });
+    row.querySelector(".item-del").addEventListener("click", (e)=>{ e.stopPropagation(); onDelete(); });
+    return row;
+  }
+
+  // Items placed directly on a tier/shelf, not inside any box
+  function renderLooseItemsSection(shelf, tier){
+    const wrap = document.createElement("div");
+    wrap.className = "loose-section";
+
+    const head = document.createElement("div");
+    head.className = "loose-head";
+    head.textContent = "🗂 棚に直接置いてあるアイテム";
+    wrap.appendChild(head);
+
+    if(tier.looseItems.length === 0){
+      const empty = document.createElement("div");
+      empty.className = "empty-note";
+      empty.style.padding = "6px 0";
+      empty.textContent = "直置きのアイテムはありません";
+      wrap.appendChild(empty);
+    } else {
+      tier.looseItems.forEach(item=>{
+        wrap.appendChild(renderItemRow(item,
+          delta => adjustItemQty(shelf, null, item, delta),
+          ()=>{
+            addLog({type:"remove", shelfName:shelf.name, boxLabel:null, itemName:item.name, delta:-(item.qty||0), qtyAfter:0});
+            tier.looseItems = tier.looseItems.filter(it=>it.id!==item.id);
+            saveState(); renderSheet();
+          }
+        ));
+      });
+    }
+
+    const form = document.createElement("div");
+    form.className = "add-item-form";
+    form.innerHTML = `
+      <div class="row2">
+        <input type="text" placeholder="品名" class="looseItemName">
+        <input type="number" placeholder="数量" class="looseItemQty" style="max-width:70px;">
+      </div>
+      <button class="looseAddItemBtn">直接置く</button>
+    `;
+    form.querySelector(".looseAddItemBtn").addEventListener("click", ()=>{
+      const nameInput = form.querySelector(".looseItemName");
+      const qtyInput = form.querySelector(".looseItemQty");
+      const name = nameInput.value.trim();
+      if(!name) return;
+      const qty = parseInt(qtyInput.value, 10) || 0;
+      tier.looseItems.push({ id: uid("item"), name, qty });
+      addLog({type:"add", shelfName:shelf.name, boxLabel:null, itemName:name, delta:qty, qtyAfter:qty});
+      saveState();
+      renderSheet();
+    });
+    wrap.appendChild(form);
+
+    return wrap;
   }
 
   function renderBoxCard(shelf, tier, box){
@@ -809,34 +892,14 @@
         itemsWrap.appendChild(empty);
       } else {
         box.items.forEach(item=>{
-          const row = document.createElement("div");
-          row.className = "item-row";
-          row.innerHTML = `
-            <div class="info">
-              <div class="name">${escapeHtml(item.name)}</div>
-            </div>
-            <div class="qty-stepper">
-              <button class="qty-btn qty-minus" type="button">－</button>
-              <span class="qty-val">${item.qty || 0}</span>
-              <button class="qty-btn qty-plus" type="button">＋</button>
-            </div>
-            <button class="item-del">✕</button>
-          `;
-          row.querySelector(".qty-minus").addEventListener("click", (e)=>{
-            e.stopPropagation();
-            adjustItemQty(shelf, box, item, -1);
-          });
-          row.querySelector(".qty-plus").addEventListener("click", (e)=>{
-            e.stopPropagation();
-            adjustItemQty(shelf, box, item, 1);
-          });
-          row.querySelector(".item-del").addEventListener("click", (e)=>{
-            e.stopPropagation();
-            addLog({type:"remove", shelfName:shelf.name, boxLabel:box.label, itemName:item.name, delta:-(item.qty||0), qtyAfter:0});
-            box.items = box.items.filter(it=>it.id!==item.id);
-            saveState(); renderSheet();
-          });
-          itemsWrap.appendChild(row);
+          itemsWrap.appendChild(renderItemRow(item,
+            delta => adjustItemQty(shelf, box.label, item, delta),
+            ()=>{
+              addLog({type:"remove", shelfName:shelf.name, boxLabel:box.label, itemName:item.name, delta:-(item.qty||0), qtyAfter:0});
+              box.items = box.items.filter(it=>it.id!==item.id);
+              saveState(); renderSheet();
+            }
+          ));
         });
       }
 
@@ -986,12 +1049,12 @@
       const shelf = getShelf(editingShelfId);
       shelf.name = name; shelf.x = x; shelf.y = y; shelf.w = w; shelf.h = h;
       // adjust tier count, preserving existing items
-      while(shelf.tiers.length < tierCount) shelf.tiers.push({ boxes: [] });
+      while(shelf.tiers.length < tierCount) shelf.tiers.push({ boxes: [], looseItems: [] });
       while(shelf.tiers.length > tierCount) shelf.tiers.pop();
     } else {
       const shelf = {
         id: uid("shelf"), name, x, y, w, h, isFloor,
-        tiers: Array.from({length: tierCount}, ()=>({ boxes: [] }))
+        tiers: Array.from({length: tierCount}, ()=>({ boxes: [], looseItems: [] }))
       };
       state.shelves.push(shelf);
     }
@@ -1095,7 +1158,7 @@
           <div class="log-item">${escapeHtml(LOG_TYPE_LABEL[entry.type]||entry.type)} ・ ${escapeHtml(entry.itemName)}</div>
           <div class="log-delta ${deltaCls}">${deltaSign}${entry.delta}（計${entry.qtyAfter}）</div>
         </div>
-        <div class="log-meta">${formatLogTime(entry.ts)} ・ ${escapeHtml(entry.shelfName)} ・ 📦${escapeHtml(entry.boxLabel)}</div>
+        <div class="log-meta">${formatLogTime(entry.ts)} ・ ${escapeHtml(entry.shelfName)} ・ ${entry.boxLabel ? "📦"+escapeHtml(entry.boxLabel) : "🗂 直置き"}</div>
       `;
       logList.appendChild(row);
     });
@@ -1135,10 +1198,18 @@
     const matchedShelfIds = new Set();
     state.shelves.forEach(shelf=>{
       const shelfNameMatch = shelf.name.toLowerCase().includes(query);
-      let shelfHasAnyBox = false;
+      let shelfHasAnyContent = false;
       shelf.tiers.forEach((tier, ti)=>{
+        tier.looseItems.forEach(item=>{
+          shelfHasAnyContent = true;
+          const hit = shelfNameMatch || item.name.toLowerCase().includes(query);
+          if(hit){
+            matches.push({ shelfId: shelf.id, shelfName: shelf.name, tierIndex: ti, isFloor: shelf.isFloor, boxLabel: null, boxId: null, item });
+            matchedShelfIds.add(shelf.id);
+          }
+        });
         tier.boxes.forEach(box=>{
-          shelfHasAnyBox = true;
+          shelfHasAnyContent = true;
           const boxLabelMatch = box.label.toLowerCase().includes(query);
           box.items.forEach(item=>{
             const hit = shelfNameMatch || boxLabelMatch || item.name.toLowerCase().includes(query);
@@ -1153,7 +1224,7 @@
           }
         });
       });
-      if(shelfNameMatch && !shelfHasAnyBox){
+      if(shelfNameMatch && !shelfHasAnyContent){
         matchedShelfIds.add(shelf.id);
       }
     });
@@ -1170,7 +1241,7 @@
         row.innerHTML = `
           <div>
             <div>${escapeHtml(m.item.name)}</div>
-            <div class="meta">${escapeHtml(m.shelfName)} ・ ${m.isFloor?"直置き":( (m.tierIndex+1)+"段目")} ・ 📦${escapeHtml(m.boxLabel)}</div>
+            <div class="meta">${escapeHtml(m.shelfName)} ・ ${m.isFloor?"直置き":( (m.tierIndex+1)+"段目")}${m.boxLabel ? " ・ 📦"+escapeHtml(m.boxLabel) : " ・ 🗂 棚に直置き"}</div>
           </div>
           <div class="tag">開く</div>
         `;
@@ -1209,13 +1280,18 @@
       const block = document.createElement("div");
       block.className = "print-shelf";
       const totalBoxes = shelf.tiers.reduce((n,t)=>n+t.boxes.length,0);
+      const totalLoose = shelf.tiers.reduce((n,t)=>n+t.looseItems.length,0);
       let html = `<div class="print-shelf-name">${escapeHtml(shelf.name)} — ${shelf.isFloor?"直置き":"棚"} ・ 幅${shelf.w}×奥行${shelf.h}cm ・ 位置(${shelf.x},${shelf.y})</div>`;
-      if(totalBoxes === 0){
+      if(totalBoxes === 0 && totalLoose === 0){
         html += `<div class="print-tier print-empty">収納品の登録なし</div>`;
       } else {
         shelf.tiers.forEach((tier, ti)=>{
-          if(tier.boxes.length === 0) return;
+          if(tier.boxes.length === 0 && tier.looseItems.length === 0) return;
           html += `<div class="print-tier"><span class="t-label">${shelf.isFloor?"エリア":(ti+1)+"段目"}：</span></div>`;
+          if(tier.looseItems.length){
+            const looseStr = tier.looseItems.map(it => escapeHtml(it.name) + (it.qty ? `(${escapeHtml(it.qty)})` : "")).join("、");
+            html += `<div class="print-box">🗂 直置き ： ${looseStr}</div>`;
+          }
           tier.boxes.forEach(box=>{
             const itemsStr = box.items.length
               ? box.items.map(it => escapeHtml(it.name) + (it.qty ? `(${escapeHtml(it.qty)})` : "")).join("、")
@@ -1313,11 +1389,11 @@
   if(state.shelves.length === 0){
     state.shelves.push({
       id: uid("shelf"), name:"A棚", x:5, y:5, w:40, h:30, isFloor:false,
-      tiers:[{boxes:[]},{boxes:[]},{boxes:[]}]
+      tiers:[{boxes:[],looseItems:[]},{boxes:[],looseItems:[]},{boxes:[],looseItems:[]}]
     });
     state.shelves.push({
       id: uid("shelf"), name:"床置きエリア", x:5, y:90, w:60, h:35, isFloor:true,
-      tiers:[{boxes:[]}]
+      tiers:[{boxes:[],looseItems:[]}]
     });
     saveState();
   }
