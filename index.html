@@ -904,7 +904,8 @@
       qdInput.value = defaultValue;
       qdInput.placeholder = placeholder;
       qdOverlay.classList.add("show");
-      setTimeout(()=>{ qdInput.focus(); qdInput.select(); }, 60);
+      qdInput.focus();
+      qdInput.select();
     });
   }
   function showConfirmDialog({title, message}){
