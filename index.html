@@ -1281,7 +1281,7 @@
       block.className = "print-shelf";
       const totalBoxes = shelf.tiers.reduce((n,t)=>n+t.boxes.length,0);
       const totalLoose = shelf.tiers.reduce((n,t)=>n+t.looseItems.length,0);
-      let html = `<div class="print-shelf-name">${escapeHtml(shelf.name)} — ${shelf.isFloor?"直置き":"棚"} ・ 幅${shelf.w}×奥行${shelf.h}cm ・ 位置(${shelf.x},${shelf.y})</div>`;
+      let html = `<div class="print-shelf-name">${escapeHtml(shelf.name)} — ${shelf.isFloor?"直置き":"棚"}</div>`;
       if(totalBoxes === 0 && totalLoose === 0){
         html += `<div class="print-tier print-empty">収納品の登録なし</div>`;
       } else {
@@ -1295,8 +1295,8 @@
           tier.boxes.forEach(box=>{
             const itemsStr = box.items.length
               ? box.items.map(it => escapeHtml(it.name) + (it.qty ? `(${escapeHtml(it.qty)})` : "")).join("、")
-              : "空";
-            html += `<div class="print-box">📦 ${escapeHtml(box.label)}${box.note? " ／ "+escapeHtml(box.note):""} ： ${itemsStr}</div>`;
+              : "";
+            html += `<div class="print-box">📦 ${escapeHtml(box.label)}${box.note? " ／ "+escapeHtml(box.note):""}${itemsStr ? " ： "+itemsStr : ""}</div>`;
           });
         });
       }
@@ -1330,6 +1330,12 @@
   }
   h2{font-family:'Montserrat','Inter',sans-serif;font-weight:400;font-size:15px;margin:0 0 2px;}
   .meta{font-size:10px;color:#9A9A9A;margin-bottom:14px;}
+  .back-btn{
+    display:inline-block;border:1px solid #0A0A0A;background:#fff;color:#0A0A0A;
+    padding:9px 16px;font-size:12px;font-family:inherit;letter-spacing:.05em;
+    margin-bottom:14px;cursor:pointer;text-decoration:none;
+  }
+  .back-btn:active{background:#0A0A0A;color:#fff;}
   .map-wrap{max-width:480px;margin:0 auto 24px;border:1px solid #0A0A0A;}
   svg{display:block;width:100%;height:auto;}
   .wall-line{stroke:#0A0A0A;stroke-width:1.5;vector-effect:non-scaling-stroke;fill:none;stroke-linecap:square;}
@@ -1344,15 +1350,20 @@
   .print-tier .t-label{color:#9A9A9A;}
   .print-box{margin-left:16px;font-size:10px;padding:1px 0;}
   .print-empty{color:#9A9A9A;}
-  @media print{ body{padding:0;} }
+  @media print{ body{padding:0;} .back-btn{display:none;} }
 </style></head>
 <body>
+  <button class="back-btn" id="backBtn">← 戻る</button>
   <h2>MYKITA Osaka ・ 倉庫マップ</h2>
   <div class="meta">${metaText}</div>
   <div class="map-wrap">${svgMarkup}</div>
   <div>${summaryMarkup}</div>
   <script>
     window.addEventListener('load', function(){ setTimeout(function(){ window.print(); }, 200); });
+    document.getElementById('backBtn').addEventListener('click', function(){
+      window.close();
+      setTimeout(function(){ if(!window.closed) history.back(); }, 150);
+    });
   <\/script>
 </body></html>`;
 
