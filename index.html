@@ -1290,7 +1290,7 @@
           html += `<div class="print-tier"><span class="t-label">${shelf.isFloor?"エリア":(ti+1)+"段目"}：</span></div>`;
           if(tier.looseItems.length){
             const looseStr = tier.looseItems.map(it => escapeHtml(it.name) + (it.qty ? `(${escapeHtml(it.qty)})` : "")).join("、");
-            html += `<div class="print-box">🗂 直置き ： ${looseStr}</div>`;
+            html += `<div class="print-box">🗂 ${looseStr}</div>`;
           }
           tier.boxes.forEach(box=>{
             const itemsStr = box.items.length
