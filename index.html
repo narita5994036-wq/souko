@@ -256,6 +256,26 @@
   .type-toggle div{flex:1;text-align:center;padding:8px;font-size:12px;cursor:pointer;color:var(--gray-mid);}
   .type-toggle div.active{background:var(--black);color:var(--white);}
 
+  /* Wide (PC/tablet) screens: give the header/map/toolbar more room, and dock
+     the shelf detail sheet as a right-side drawer instead of a full-width
+     bottom sheet so the map stays visible while browsing a shelf. */
+  @media (min-width: 860px){
+    .brand, .search-row{ max-width:620px; margin-left:auto; margin-right:auto; }
+    #searchResults{ max-width:622px; margin:0 auto; }
+    .map-wrap{ max-width:560px; }
+    .toolbar{ max-width:560px; }
+
+    .sheet{
+      left:auto; right:0; top:0; bottom:0;
+      width:420px; max-width:90vw; height:100%; max-height:none;
+      border-top:none; border-left:1px solid var(--black);
+      transform:translateX(100%);
+      box-shadow:-6px 0 24px rgba(10,10,10,.12);
+    }
+    .sheet.show{ transform:translateX(0); }
+    .sheet-handle{ display:none; }
+  }
+
   /* Print */
   .print-only{display:none;}
   #printHeader h2{font-size:15px;margin-bottom:2px;}
