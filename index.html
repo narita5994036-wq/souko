@@ -333,6 +333,8 @@
     <button class="btn" id="addFloorBtn">＋ 直置きエリア</button>
     <button class="btn ghost" id="logBtn">📝 ログ</button>
     <button class="btn ghost" id="exportBtn">書き出し</button>
+    <button class="btn ghost" id="importBtn">読み込み</button>
+    <input type="file" id="importFileInput" accept="application/json,.json" style="display:none;">
     <button class="btn ghost" id="printBtn">🖨 印刷</button>
   </div>
 
@@ -1442,6 +1444,36 @@
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+  });
+
+  // ---------- Import ----------
+  const importFileInput = document.getElementById("importFileInput");
+  document.getElementById("importBtn").addEventListener("click", ()=>{
+    importFileInput.value = "";
+    importFileInput.click();
+  });
+  importFileInput.addEventListener("change", async ()=>{
+    const file = importFileInput.files[0];
+    if(!file) return;
+    let parsed;
+    try{
+      const text = await file.text();
+      parsed = JSON.parse(text);
+    }catch(e){
+      await showConfirmDialog({title:"読み込みエラー", message:"JSONファイルを読み込めませんでした。ファイルの内容を確認してください。"});
+      return;
+    }
+    if(!parsed || !Array.isArray(parsed.shelves)){
+      await showConfirmDialog({title:"読み込みエラー", message:"このファイルは倉庫マップのデータ形式ではないようです。"});
+      return;
+    }
+    const ok = await showConfirmDialog({title:"データの読み込み", message:"現在のデータをすべて置き換えます。よろしいですか？"});
+    if(!ok) return;
+    state = migrateState(parsed);
+    saveState();
+    closeSheet();
+    renderMap();
+    renderPrintSummary();
   });
 
   function escapeHtml(str){
